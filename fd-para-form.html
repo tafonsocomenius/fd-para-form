@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FD → Google Form</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 36px;
+      width: 100%;
+      max-width: 640px;
+      margin-bottom: 20px;
+    }
+    h1 { font-size: 22px; color: #1a1a2e; margin-bottom: 6px; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 28px; }
+
+    /* Config section */
+    .config-section { margin-bottom: 24px; }
+    .config-section label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }
+    .config-section input {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #ddd;
+      border-radius: 8px; font-size: 14px; color: #333;
+      transition: border-color 0.2s;
+    }
+    .config-section input:focus { outline: none; border-color: #4285f4; }
+    .config-hint { font-size: 12px; color: #888; margin-top: 5px; }
+    .config-hint a { color: #4285f4; }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 2.5px dashed #c5d0e0;
+      border-radius: 10px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #fafbff;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: #4285f4;
+      background: #f0f4ff;
+    }
+    .upload-zone svg { width: 40px; height: 40px; color: #aab; margin-bottom: 12px; }
+    .upload-zone p { color: #667; font-size: 15px; }
+    .upload-zone span { color: #4285f4; font-weight: 600; }
+    #fileInput { display: none; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 8px; border: none;
+      font-size: 15px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; text-decoration: none;
+    }
+    .btn-primary { background: #4285f4; color: white; width: 100%; justify-content: center; }
+    .btn-primary:hover { background: #3367d6; }
+    .btn-primary:disabled { background: #b0c4f5; cursor: not-allowed; }
+    .btn-google { background: white; color: #333; border: 1.5px solid #ddd; }
+    .btn-google:hover { background: #f8f8f8; }
+    .btn-success { background: #34a853; color: white; }
+    .btn-success:hover { background: #2d9248; }
+
+    /* Preview */
+    .preview { margin-top: 20px; }
+    .preview h3 { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 12px; }
+    .qual-badge {
+      display: inline-block; background: #e8f0fe; color: #3367d6;
+      padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .uc-item {
+      background: #f8f9fa; border-radius: 8px; padding: 12px 14px;
+      margin-bottom: 8px; border-left: 3px solid #4285f4;
+    }
+    .uc-title { font-size: 13px; font-weight: 700; color: #333; }
+    .uc-tasks { font-size: 12px; color: #666; margin-top: 4px; }
+
+    /* Status */
+    .status {
+      padding: 12px 16px; border-radius: 8px; font-size: 14px;
+      display: flex; align-items: center; gap: 10px; margin-top: 16px;
+    }
+    .status.info { background: #e8f0fe; color: #1a56db; }
+    .status.success { background: #e6f4ea; color: #1e7e34; }
+    .status.error { background: #fce8e6; color: #c5221f; }
+    .status.loading { background: #fff8e1; color: #856404; }
+
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid currentColor;
+      border-top-color: transparent; border-radius: 50%;
+      animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .result-link {
+      display: flex; flex-direction: column; gap: 10px; margin-top: 16px;
+    }
+    .result-link a {
+      color: #4285f4; word-break: break-all; font-size: 13px;
+    }
+
+    .step { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .step-num {
+      width: 24px; height: 24px; border-radius: 50%; background: #4285f4;
+      color: white; font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .step-text { font-size: 13px; color: #444; }
+
+    hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
+    .section-title { font-size: 13px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; }
+
+    #loginSection, #mainSection { display: none; }
+    #configSection { }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>📋 FD → Google Form</h1>
+  <p class="subtitle">Converte automaticamente uma Ficha de Diagnóstico (.docx) em Google Form</p>
+
+  <!-- STEP 1: Config -->
+  <div id="configSection">
+    <p class="section-title">1. Configuração (uma vez)</p>
+    <div class="config-section">
+      <label>Google OAuth Client ID</label>
+      <input type="text" id="clientIdInput" placeholder="xxxxxxxxxxxx-xxxxxxxx.apps.googleusercontent.com" />
+      <p class="config-hint">
+        Obtém em <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> → Credenciais → Criar ID de cliente OAuth 2.0
+        (<a href="#" onclick="toggleInstructions()">ver instruções</a>)
+      </p>
+    </div>
+    <div id="instructions" style="display:none; background:#f8f9fa; border-radius:8px; padding:16px; margin-bottom:16px;">
+      <p style="font-weight:700; font-size:13px; margin-bottom:12px;">Como criar o Client ID (uma única vez):</p>
+      <div class="step"><div class="step-num">1</div><div class="step-text">Vai a <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> e cria um projeto novo</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text">Menu → APIs e Serviços → Biblioteca → pesquisa "Google Forms API" → Ativar</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text">APIs e Serviços → Credenciais → Criar credenciais → ID de cliente OAuth 2.0</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text">Tipo: <strong>Aplicação Web</strong> → Nome: "FD para Form" → em "Origens JavaScript autorizadas" adiciona <code>http://localhost:8080</code></div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-text">Copia o Client ID e cola acima</div></div>
+      <div class="step"><div class="step-num">6</div><div class="step-text">Ecrã de consentimento OAuth → Tipo externo → adiciona o teu email como utilizador de teste</div></div>
+    </div>
+    <button class="btn btn-google" onclick="initGoogle()" style="width:100%">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/><path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/><path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/></svg>
+      Ligar à Conta Google
+    </button>
+  </div>
+
+  <!-- STEP 2: Upload (after login) -->
+  <div id="mainSection">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px;">
+      <div style="width:10px;height:10px;border-radius:50%;background:#34a853;"></div>
+      <span id="userEmail" style="font-size:13px; color:#444;"></span>
+      <button onclick="signOut()" style="margin-left:auto; background:none; border:none; color:#888; font-size:12px; cursor:pointer;">Sair</button>
+    </div>
+
+    <p class="section-title">2. Carrega a Ficha de Diagnóstico</p>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
+         ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/>
+      </svg>
+      <p>Arrasta o ficheiro aqui ou <span>clica para escolher</span></p>
+      <p style="font-size:12px; color:#aaa; margin-top:6px;">Ficheiros .docx</p>
+    </div>
+    <input type="file" id="fileInput" accept=".docx" onchange="handleFile(this.files[0])">
+
+    <div id="preview" class="preview" style="display:none;"></div>
+    <div id="status"></div>
+
+    <div id="actionArea" style="display:none; margin-top:20px;">
+      <button class="btn btn-primary" id="createBtn" onclick="createForm()">
+        ✨ Criar Google Form
+      </button>
+    </div>
+
+    <div id="resultArea" style="display:none;" class="result-link">
+      <div class="status success">
+        <span>✅</span>
+        <span>Form criado com sucesso!</span>
+      </div>
+      <a id="formEditLink" href="#" target="_blank">🔗 Abrir Form (edição)</a>
+      <a id="formFillLink" href="#" target="_blank">📝 Link para os formandos</a>
+      <button class="btn btn-success" onclick="copyLink()" style="width:100%; margin-top:4px;">📋 Copiar link dos formandos</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────
+const SCOPE = 'https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/drive.file';
+let accessToken = null;
+let parsedFD = null;
+let tokenClient = null;
+
+// Load saved client ID
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('fd_client_id');
+  if (saved) document.getElementById('clientIdInput').value = saved;
+});
+
+function toggleInstructions() {
+  const el = document.getElementById('instructions');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// ─── GOOGLE AUTH ────────────────────────────────────────────────────────────
+function initGoogle() {
+  const clientId = document.getElementById('clientIdInput').value.trim();
+  if (!clientId) {
+    showStatus('Insere o Client ID primeiro.', 'error');
+    return;
+  }
+  localStorage.setItem('fd_client_id', clientId);
+
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: SCOPE,
+    callback: (response) => {
+      if (response.error) {
+        showStatus('Erro ao autenticar: ' + response.error, 'error');
+        return;
+      }
+      accessToken = response.access_token;
+      // Get user info
+      fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: 'Bearer ' + accessToken }
+      }).then(r => r.json()).then(info => {
+        document.getElementById('userEmail').textContent = info.email || 'Conta Google ligada';
+        document.getElementById('configSection').style.display = 'none';
+        document.getElementById('mainSection').style.display = 'block';
+      });
+    }
+  });
+  tokenClient.requestAccessToken();
+}
+
+function signOut() {
+  google.accounts.oauth2.revoke(accessToken, () => {
+    accessToken = null;
+    document.getElementById('configSection').style.display = 'block';
+    document.getElementById('mainSection').style.display = 'none';
+    document.getElementById('preview').style.display = 'none';
+    document.getElementById('actionArea').style.display = 'none';
+    document.getElementById('resultArea').style.display = 'none';
+  });
+}
+
+// ─── FILE HANDLING ──────────────────────────────────────────────────────────
+function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.docx')) handleFile(file);
+  else showStatus('Por favor usa um ficheiro .docx', 'error');
+}
+
+function handleFile(file) {
+  if (!file) return;
+  showStatus('<div class="spinner"></div> A ler ficheiro...', 'loading');
+  document.getElementById('actionArea').style.display = 'none';
+  document.getElementById('resultArea').style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    mammoth.extractRawText({ arrayBuffer: e.target.result })
+      .then(result => {
+        parsedFD = parseFD(result.value);
+        renderPreview(parsedFD);
+        document.getElementById('status').innerHTML = '';
+        document.getElementById('actionArea').style.display = 'block';
+      })
+      .catch(err => showStatus('Erro ao ler o ficheiro: ' + err.message, 'error'));
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ─── FD PARSER ──────────────────────────────────────────────────────────────
+function parseFD(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const skip = new Set(['Tarefas', 'Diagnóstico', 'Sei Fazer', 'Não sei fazer',
+    'Ficha de Diagnóstico', 'DADOS PESSOAIS', 'IDENTIFICAÇÃO DA QUALIFICAÇÃO',
+    'Referencial de Reconhecimento, Validação e Certificação de Competências Profissionais',
+    'Nome', 'Nome ', 'Nº de Identificação', 'válido até', 'Nível de qualificação',
+    'Designação da Qualificação']);
+
+  const fd = { qualificacao: '', nivel: '', ucs: [] };
+  let currentUC = null;
+  let pendingTask = '';
+  const ucPattern = /^UC\s+\d+\s*[-–]/i;
+  const taskPattern = /^\d+\.\d+\s*[-–]/;
+
+  function flushTask() {
+    if (pendingTask && currentUC) {
+      currentUC.tasks.push(pendingTask.trim());
+      pendingTask = '';
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Qualificação name (line after "Designação da Qualificação")
+    if (lines[i - 1] === 'Designação da Qualificação') { fd.qualificacao = line; continue; }
+    if (lines[i - 1] === 'Nível de qualificação') { fd.nivel = line; continue; }
+    if (skip.has(line) || skip.has(line.replace(/ $/, ''))) continue;
+    if (/^Nível\s+\d+$/.test(line)) { if (!fd.nivel) fd.nivel = line; continue; }
+
+    if (ucPattern.test(line)) {
+      flushTask();
+      // Extract UC title (before UFCD if inline)
+      let ucTitle = line;
+      // Sometimes UC + UFCD are merged: "UC 1 - Título UFCD 1234 - ..."
+      const ufcdIdx = ucTitle.search(/\s+UFCD\s+\d+/);
+      if (ufcdIdx > -1) ucTitle = ucTitle.substring(0, ufcdIdx).trim();
+      currentUC = { title: ucTitle, tasks: [] };
+      fd.ucs.push(currentUC);
+      continue;
+    }
+
+    // Skip UFCD lines (standalone)
+    if (/^UFCD\s+\d+/.test(line)) continue;
+
+    if (taskPattern.test(line)) {
+      flushTask();
+      pendingTask = line;
+      continue;
+    }
+
+    // Continuation of previous task (wrapped line)
+    if (pendingTask && currentUC && !/^UC\s/i.test(line)) {
+      pendingTask += ' ' + line;
+      continue;
+    }
+  }
+  flushTask();
+
+  return fd;
+}
+
+// ─── PREVIEW ────────────────────────────────────────────────────────────────
+function renderPreview(fd) {
+  const el = document.getElementById('preview');
+  let html = `<h3>Pré-visualização</h3>
+    <div class="qual-badge">${fd.qualificacao} — ${fd.nivel}</div>`;
+  fd.ucs.forEach(uc => {
+    html += `<div class="uc-item">
+      <div class="uc-title">${uc.title}</div>
+      <div class="uc-tasks">${uc.tasks.length} tarefa${uc.tasks.length !== 1 ? 's' : ''}: ${uc.tasks.slice(0,2).join('; ')}${uc.tasks.length > 2 ? '...' : ''}</div>
+    </div>`;
+  });
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+// ─── GOOGLE FORMS API ────────────────────────────────────────────────────────
+async function apiCall(url, method, body) {
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': 'Bearer ' + accessToken,
+      'Content-Type': 'application/json'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function createForm() {
+  if (!parsedFD) return;
+  const btn = document.getElementById('createBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ A criar...';
+  document.getElementById('resultArea').style.display = 'none';
+  showStatus('<div class="spinner"></div> A criar o Form no Google Drive...', 'loading');
+
+  try {
+    // 1. Create form
+    const form = await apiCall('https://forms.googleapis.com/v1/forms', 'POST', {
+      info: { title: `Ficha de Diagnóstico — ${parsedFD.qualificacao}` }
+    });
+    const formId = form.formId;
+
+    // 2. Build batchUpdate requests
+    const requests = [];
+    let idx = 0;
+
+    // Description
+    requests.push({
+      updateFormInfo: {
+        info: {
+          description: `${parsedFD.nivel} | Diagnóstico de competências profissionais\n\nPreenche este formulário com honestidade — não existem respostas certas ou erradas. O objetivo é perceber o teu ponto de partida.`
+        },
+        updateMask: 'description'
+      }
+    });
+
+    // Personal data section
+    const personalFields = [
+      { title: 'Nome completo', required: true },
+      { title: 'Nº de Identificação (BI/CC)', required: true },
+      { title: 'Validade do documento', required: false }
+    ];
+    personalFields.forEach(f => {
+      requests.push({
+        createItem: {
+          item: {
+            title: f.title,
+            questionItem: { question: { required: f.required, textQuestion: { paragraph: false } } }
+          },
+          location: { index: idx++ }
+        }
+      });
+    });
+
+    // UC sections
+    parsedFD.ucs.forEach(uc => {
+      // Page break / section header
+      requests.push({
+        createItem: {
+          item: { title: uc.title, pageBreakItem: {} },
+          location: { index: idx++ }
+        }
+      });
+
+      // Tasks as radio questions
+      uc.tasks.forEach(task => {
+        requests.push({
+          createItem: {
+            item: {
+              title: task,
+              questionItem: {
+                question: {
+                  required: true,
+                  choiceQuestion: {
+                    type: 'RADIO',
+                    options: [
+                      { value: 'Sei Fazer' },
+                      { value: 'Já fiz mas preciso de praticar' },
+                      { value: 'Não sei fazer' }
+                    ]
+                  }
+                }
+              }
+            },
+            location: { index: idx++ }
+          }
+        });
+      });
+    });
+
+    // Send batchUpdate
+    showStatus('<div class="spinner"></div> A adicionar ' + idx + ' perguntas...', 'loading');
+    await apiCall(`https://forms.googleapis.com/v1/forms/${formId}:batchUpdate`, 'POST', { requests });
+
+    // Show result
+    const editUrl = `https://docs.google.com/forms/d/${formId}/edit`;
+    const fillUrl = `https://docs.google.com/forms/d/${formId}/viewform`;
+    document.getElementById('formEditLink').href = editUrl;
+    document.getElementById('formFillLink').href = fillUrl;
+    document.getElementById('formFillLink').dataset.href = fillUrl;
+    document.getElementById('resultArea').style.display = 'block';
+    document.getElementById('status').innerHTML = '';
+
+  } catch (err) {
+    showStatus('❌ Erro: ' + err.message, 'error');
+    // If token expired, re-authenticate
+    if (err.message.includes('401') || err.message.includes('UNAUTHENTICATED')) {
+      tokenClient.requestAccessToken();
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Criar Google Form';
+  }
+}
+
+function copyLink() {
+  const link = document.getElementById('formFillLink').href;
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = event.target;
+    btn.textContent = '✅ Copiado!';
+    setTimeout(() => { btn.textContent = '📋 Copiar link dos formandos'; }, 2000);
+  });
+}
+
+// ─── STATUS ─────────────────────────────────────────────────────────────────
+function showStatus(msg, type) {
+  document.getElementById('status').innerHTML = `<div class="status ${type}">${msg}</div>`;
+}
+
+// Auto-init if client ID saved and page loaded from localhost
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('fd_client_id');
+  if (saved) {
+    document.getElementById('clientIdInput').value = saved;
+  }
+});
+</script>
+</body>
+</html>
